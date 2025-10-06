@@ -1,13 +1,14 @@
+
 clc, clear, close
 
-img = imread("amadus4.jpeg");
-img = imread('user_profile_stock.jpeg');
-%img = imread('Amadeus.jpeg');
-%img = imresize(img, 0.15);
+%img = imread("amadus4.jpeg");
+%img = imread('user_profile_stock.jpeg');
+img = imread('Amadeus.jpeg');
+img = imresize(img, 0.15);
 gray = rgb2gray(img);
 
-%th = 140;          %amadeus
-th = 100;           %stock image
+th = 140;          %amadeus
+%th = 100;           %stock image
 %th = 120;           %steve 2
 inv = 255 - gray;
 bw = inv > th;               % binary: figure = 1, background = 0
@@ -77,3 +78,46 @@ subplot(2,3,2); imshow(fill_downup); title('Down → Up');
 subplot(2,3,3); imshow(fill_leftright); title('Left → Right');
 subplot(2,3,4); imshow(fill_rightleft); title('Right → Left');
 subplot(2,3,5); imshow(combined_all); title('Intersection (All Directions)');
+
+% smoothing and sharpening
+
+filter = fspecial('average',5); 
+
+smooth = filter2(filter, gray);
+
+figure(5)
+imshow(smooth, [], "InitialMagnification", 'fit')
+
+img_hp = gray - cast(smooth,"uint8");
+
+sharp = gray + img_hp * 2.;
+
+figure(6)
+imshow(sharp, [], "InitialMagnification", 'fit')
+
+final_img = zeros(h,w);
+for r = 1:h
+    for c = 1:w
+        if combined_all(r,c) == 1
+            final_img(r,c) = sharp(r,c);
+        else
+            final_img(r,c) = smooth(r,c);
+        end
+    end
+end
+
+
+figure(7)
+imshow(final_img, [], "InitialMagnification", 'fit')
+
+
+
+%% ---------- Optional cleanup ----------
+combined_all = imopen(combined_all, strel('disk', 2));
+combined_all = imclose(combined_all, strel('disk', 3));
+combined_all = bwareafilt(combined_all, 1);
+
+figure(4); imshow(combined_all); title('Final 4-direction silhouette');
+
+%% ---------- Save result ----------
+imwrite(combined_all, 'Amadeus_4dir_silhouette.png');
