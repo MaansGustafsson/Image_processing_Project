@@ -1,0 +1,277 @@
+clc, clear, close
+
+
+image = imread("water.jpg");
+image_gray = rgb2gray(image);
+%imshow(image_gray, [], "InitialMagnification", 'fit');
+figure;
+imshow(image);
+filter = fspecial('average',8); 
+
+smooth = filter2(filter, image_gray);
+
+%imshow(smooth, [], "InitialMagnification", 'fit');
+
+hp = image_gray - cast(smooth,"uint8");
+
+%imshow(hp, [], "InitialMagnification", 'fit');
+
+
+%%
+
+clc, clear, close
+
+image = imread("water.jpg");
+image_gray = rgb2gray(image);
+imshow(image_gray, [], "InitialMagnification", 'fit');
+
+hp = (1./9).* [-1 -1 -1; -1 8 -1; -1 -1 -1]; 
+
+hp_image = filter2(hp,image_gray); 
+
+%imshow(hp_image, [0 70], "InitialMagnification", 'fit');
+
+%%
+clc, clear, close
+
+image = imread("water.jpg");
+image_gray = rgb2gray(image);
+imshow(image_gray, [], "InitialMagnification", 'fit');
+
+BW = edge(image_gray, 'canny');
+
+%imshow(BW, [0 0], "InitialMagnification", 'fit');
+
+%%
+clc, clear, close
+
+image = imread("water.jpg");
+image_gray = rgb2gray(image);
+%figure (1)
+%imshow(image_gray, [], "InitialMagnification", 'fit');
+
+wavelet_type = 'haar';
+
+[a, hd, vd, dd] = dwt2( image_gray, wavelet_type );
+
+%figure (2)
+%imshow(hd, [], 'InitialMagnification', 'fit')   % Detail Horizontal
+
+%figure (3)
+%imshow(dd, [], 'InitialMagnification', 'fit')   % No horizontal or vertical details
+
+diag_image =a -hd -vd;
+
+
+
+
+%figure (4)
+%imshow(diag_image, [], 'InitialMagnification', 'fit')   
+
+BW = edge(diag_image, 'canny');
+
+imshow(BW, [], "InitialMagnification", 'fit');
+
+
+
+row = 100;   
+imshow(dd, [], "InitialMagnification", 'fit');
+hold on;
+line([1 size(dd,2)], [row row], 'Color','r','LineWidth',1);
+
+
+                       % choose the row you want
+intensity_profile = double(dd(row, :));  % convert to double for math
+
+% Keep only positive intensities
+positive_vals = intensity_profile(intensity_profile > 0);
+
+% Compute average of positive intensities
+avg_positive = mean(positive_vals);
+
+
+%figure (5);
+%plot(intensity_profile, 'k-');     % plot as a black line
+%yline(avg_positive, 'r--', 'LineWidth', 1.5);
+%xlabel('Pixel (x-axis)');
+%ylabel('Intensity');
+%title(['Intensity profile of row ', num2str(row)]);
+
+
+
+threshold = 3;
+
+% Convert grayscale to double for comparison
+image_gray_d = double(dd);
+
+% Thresholding
+binary_image = zeros(size(dd));              % initialize black image
+binary_image(dd > threshold) = 255;          % set white where > 2
+
+% Show result
+%figure;
+%imshow(uint8(binary_image));
+title('Binary Thresholded Image (>2 → White, ≤2 → Black)');
+
+binary_image = logical(binary_image);  % make sure it's logical
+
+% Create 3x3 kernel to check neighbors (excluding center)
+h = ones(3,3);
+h(2,2) = 0;   % don't count the center pixel
+
+% Convolve to count neighbors
+neighbor_count = conv2(binary_image, h, 'same');
+
+% Keep pixel only if it has at least 1 neighbor
+filtered_image = binary_image & (neighbor_count > 0);
+
+% Display
+%figure;
+%subplot(1,2,1), imshow(binary_image), title('Original Binary');
+%subplot(1,2,2), imshow(filtered_image), title('Connected Pixels Only');
+
+
+%image = imread('water.jpg');
+%image_gray = rgb2gray(image);
+
+% Apply Canny edge detection
+%edges = edge(image_gray, 'Canny');
+
+% Display results
+%figure;
+%subplot(1,2,1), imshow(image_gray), title('Original Grayscale');
+%subplot(1,2,2), imshow(edges), title('Canny Edges');
+
+
+se = strel('disk', 1);             % structuring element, radius 1
+closed_outline = imclose(filtered_image, se);
+
+%figure;
+%subplot(1,2,1), imshow(filtered_image), title('Original Outline');
+%subplot(1,2,2), imshow(closed_outline), title('Closed / Repaired Outline');
+
+figure;
+imshow(filtered_image);
+
+I = closed_outline;
+
+
+% Convert to double precision [0,1]
+I = im2double(I);      % convert to [0,1] range (so black=0, white=1)
+
+
+[rows, cols] = size(I);
+k=0;
+maxblock=20;
+I_out = zeros(size(I));
+for i=3:maxblock
+    k=k+1;
+    blockSize = k;            % 3x3 blocks
+       % output image
+
+    for r = 1:blockSize:rows
+        for c = 1:blockSize:cols
+            % Define block boundaries
+            r_end = min(r + blockSize - 1, rows);
+            c_end = min(c + blockSize - 1, cols);
+
+            % Extract the current block
+            block = I(r:r_end, c:c_end);
+
+            % Compute sum of 9 pixels
+            blockSum = sum(block(:));
+
+            % Threshold: if sum > 4 → white, else black
+            if blockSum > 5
+                I_out(r:r_end, c:c_end) = 1;
+            else
+                I_out(r:r_end, c:c_end) = 0;
+            end
+        end
+    end
+end
+
+figure;
+imshow(I_out);
+title('3x3 block thresholded (sum > 4 → 1, else 0)');
+
+
+
+[y, x] = find(I_out);
+% Leftmost pixel
+xL = min(x);
+idxL = find(x == xL, 1);
+yL = y(idxL);
+
+% Rightmost pixel
+xR = max(x);
+idxR = find(x == xR, 1);
+yR = y(idxR);
+
+% Topmost pixel
+yT = min(y);
+idxT = find(y == yT, 1);
+xT = x(idxT);
+
+% Bottommost pixel
+yB = max(y);
+idxB = find(y == yB, 1);
+xB = x(idxB);
+
+% --- Connect these four points diagonally ---
+% Example polygon: Left → Top → Right → Bottom → Left
+x_poly = [xL, xT, xR, xB];
+y_poly = [yL, yT, yR, yB];
+
+% --- Fill the area inside that polygon ---
+mask = poly2mask(x_poly, y_poly, rows, cols);
+
+% --- Combine with original image if desired ---
+I_filled = I_out | mask;
+
+
+figure;
+imshow(I_filled);
+
+xT = x(find(y == min(y), 1));  % Topmost pixel x
+yT = y(find(y == min(y), 1));  % Topmost pixel y
+xL = x(find(x == min(x), 1));  % Leftmost pixel x
+yL = y(find(x == min(x), 1));  % Leftmost pixel y
+
+% --- Filter pixels to the left of top and above left ---
+mask = (x < xT) & (y < yL);
+x_filtered = x(mask);
+y_filtered = y(mask);
+
+if isempty(x_filtered)
+    error('No pixels satisfy the condition (left of top, above left).');
+end
+
+% --- Compute distance to the baseline for filtered pixels ---
+dx = xL - xT;
+dy = yL - yT;
+denom = sqrt(dx^2 + dy^2);
+
+distances = abs(dy*x_filtered - dx*y_filtered + xL*yT - yL*xT) / denom;
+
+% --- Find furthest pixel ---
+[~, idx] = max(distances);
+xFurthest = x_filtered(idx);
+yFurthest = y_filtered(idx);
+
+fprintf('Furthest pixel (left of top & above left): (x=%d, y=%d), distance=%.2f\n', ...
+        xFurthest, yFurthest, distances(idx));
+
+    
+x_poly = [xT, xL, xFurthest];
+y_poly = [yT, yL, yFurthest];
+
+% --- Fill the triangle ---
+triangle_mask = poly2mask(x_poly, y_poly, rows, cols);
+
+% --- Combine with original image (optional: overwrite or add) ---
+I_filled1 = I_filled | triangle_mask;
+
+figure;
+imshow(I_filled1);
+%make a gaussian kernel on black pixels and sharpen white.
