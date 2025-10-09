@@ -1,0 +1,143 @@
+
+clc, clear, close
+
+% Load a image
+%img = imread("amadus4.jpeg");
+%img = imread('user_profile_stock.jpeg');
+img = imread('Amadeus.jpeg');
+
+% If the image is to large it does not work as well, resize it, but remeber
+% it'll be halft again when walvelet transforming it
+img = imresize(img, 0.3);           
+gray = rgb2gray(img);
+
+% Wavelet trandorm the image to remove horizontal and vertical details
+% (more common in 
+wavelet_type = 'haar';
+[gray_wl, hd, vd, dd] = dwt2(gray, wavelet_type);
+
+gray_wl = gray_wl - hd -vd;
+
+gray = imresize(gray, 0.5);             % resize the gray image so it becomes the same size as the wavelet transformed image
+
+
+%Threshold, change this for different pictures
+%th = 144;          %amadeus
+th = 30;          %amadeus med wavelet
+%th = 100;           %stock image
+%th = 120;           %steve 2
+%th = 75;
+
+
+%Binarize
+inv = 255 - gray_wl;
+bw = inv > th;               %figure = 1 and background = 0
+
+figure(1)
+imshow(bw)
+title('Binary mask');
+
+bw = bwareafilt(bw, 1);      % keep largest white object
+bw = imclose(bw, strel('disk', 20));   % close small gaps
+%bw = bwareafilt(bw, 1);
+
+
+figure(2)
+imshow(bw)
+title('Cleaned up binary mask');
+
+[h, w] = size(bw);
+
+%fill the figure from up to down
+fill_updown = false(h, w);
+for c = 1:w
+    col = bw(:, c);
+    if any(col)
+        top_index = find(col, 1, 'first');
+        fill_updown(top_index:end, c) = true;
+    end
+end
+
+%fill the image from down to up
+fill_downup = false(h, w);
+for c = 1:w
+    col = bw(:, c);
+    if any(col)             %is there any element that doesn't equal 0?
+        bottom_index = find(col, 1, 'last');
+        fill_downup(1:bottom_index, c) = true;
+    end
+end
+
+%fill the image from left to right
+fill_leftright = false(h, w);
+for r = 1:h
+    row = bw(r, :);
+    if any(row)
+        left_index = find(row, 1, 'first');
+        fill_leftright(r, left_index:end) = true;
+    end
+end
+
+% Fill the image from right to left
+fill_rightleft = false(h, w);
+for r = 1:h
+    row = bw(r, :);
+    if any(row)
+        right_index = find(row, 1, 'last');
+        fill_rightleft(r, 1:right_index) = true;
+    end
+end
+
+
+%Only keep the parts that are white in every image
+combined_all = fill_updown & fill_downup & fill_leftright & fill_rightleft;
+
+
+figure(3);
+subplot(2,2,1); imshow(fill_updown); title('Up → Down');
+subplot(2,2,2); imshow(fill_downup); title('Down → Up');
+subplot(2,2,3); imshow(fill_leftright); title('Left → Right');
+subplot(2,2,4); imshow(fill_rightleft); title('Right → Left');
+
+
+figure(4);
+imshow(combined_all); 
+title('Final 4-direction silhouette');
+
+
+% smoothing and sharpening
+
+filter = fspecial('gaussian', 8,3); 
+
+smooth = filter2(filter, gray);
+
+figure(5)
+imshow(smooth, [], "InitialMagnification", 'fit')
+
+img_hp = gray - cast(smooth,"uint8");
+
+
+sharp = gray + img_hp * .5;
+
+figure(6)
+imshow(sharp, [], "InitialMagnification", 'fit')
+
+
+final_img = zeros(h,w);
+for r = 1:h
+    for c = 1:w
+        if combined_all(r,c) == 1
+            final_img(r,c) = sharp(r,c);
+        else
+            final_img(r,c) = smooth(r,c);
+        end
+    end
+end
+
+
+
+figure(7)
+imshow(final_img, [], "InitialMagnification", 'fit')
+
+
+
