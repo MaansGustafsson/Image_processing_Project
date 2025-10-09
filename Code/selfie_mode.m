@@ -1,40 +1,60 @@
 
 clc, clear, close
 
+% Load a image
 %img = imread("amadus4.jpeg");
 %img = imread('user_profile_stock.jpeg');
 img = imread('Amadeus.jpeg');
-img = imresize(img, 0.15);
+
+% If the image is to large it does not work as well, resize it, but remeber
+% it'll be halft again when walvelet transforming it
+img = imresize(img, 0.3);           
 gray = rgb2gray(img);
 
-th = 140;          %amadeus
+% Wavelet trandorm the image to remove horizontal and vertical details
+% (more common in 
+wavelet_type = 'haar';
+[gray_wl, hd, vd, dd] = dwt2(gray, wavelet_type);
+
+gray_wl = gray_wl - hd -vd;
+
+gray = imresize(gray, 0.5);             % resize the gray image so it becomes the same size as the wavelet transformed image
+
+
+%Threshold, change this for different pictures
+%th = 144;          %amadeus
+th = 30;          %amadeus med wavelet
 %th = 100;           %stock image
 %th = 120;           %steve 2
-inv = 255 - gray;
-bw = inv > th;               % binary: figure = 1, background = 0
+%th = 75;
+
+
+%Binarize
+inv = 255 - gray_wl;
+bw = inv > th;               %figure = 1 and background = 0
 
 figure(1)
 imshow(bw)
-title('Base binary mask');
+title('Binary mask');
 
 bw = bwareafilt(bw, 1);      % keep largest white object
 bw = imclose(bw, strel('disk', 20));   % close small gaps
-bw = bwareafilt(bw, 1);
+%bw = bwareafilt(bw, 1);
+
 
 figure(2)
 imshow(bw)
-title('Base binary mask');
+title('Cleaned up binary mask');
 
 [h, w] = size(bw);
-
 
 %fill the figure from up to down
 fill_updown = false(h, w);
 for c = 1:w
     col = bw(:, c);
     if any(col)
-        topIdx = find(col, 1, 'first');
-        fill_updown(topIdx:end, c) = true;
+        top_index = find(col, 1, 'first');
+        fill_updown(top_index:end, c) = true;
     end
 end
 
@@ -42,9 +62,9 @@ end
 fill_downup = false(h, w);
 for c = 1:w
     col = bw(:, c);
-    if any(col)
-        botIdx = find(col, 1, 'last');
-        fill_downup(1:botIdx, c) = true;
+    if any(col)             %is there any element that doesn't equal 0?
+        bottom_index = find(col, 1, 'last');
+        fill_downup(1:bottom_index, c) = true;
     end
 end
 
@@ -53,8 +73,8 @@ fill_leftright = false(h, w);
 for r = 1:h
     row = bw(r, :);
     if any(row)
-        leftIdx = find(row, 1, 'first');
-        fill_leftright(r, leftIdx:end) = true;
+        left_index = find(row, 1, 'first');
+        fill_leftright(r, left_index:end) = true;
     end
 end
 
@@ -63,38 +83,50 @@ fill_rightleft = false(h, w);
 for r = 1:h
     row = bw(r, :);
     if any(row)
-        rightIdx = find(row, 1, 'last');
-        fill_rightleft(r, 1:rightIdx) = true;
+        right_index = find(row, 1, 'last');
+        fill_rightleft(r, 1:right_index) = true;
     end
 end
 
 
+%Only keep the parts that are white in every image
 combined_all = fill_updown & fill_downup & fill_leftright & fill_rightleft;
 
 
 figure(3);
-subplot(2,3,1); imshow(fill_updown); title('Up → Down');
-subplot(2,3,2); imshow(fill_downup); title('Down → Up');
-subplot(2,3,3); imshow(fill_leftright); title('Left → Right');
-subplot(2,3,4); imshow(fill_rightleft); title('Right → Left');
-subplot(2,3,5); imshow(combined_all); title('Intersection (All Directions)');
+subplot(2,2,1); imshow(fill_updown); title('Up → Down');
+subplot(2,2,2); imshow(fill_downup); title('Down → Up');
+subplot(2,2,3); imshow(fill_leftright); title('Left → Right');
+subplot(2,2,4); imshow(fill_rightleft); title('Right → Left');
 
-% smoothing and sharpening
 
-filter = fspecial('average',5); 
+figure(4);
+imshow(combined_all); 
+title('Final 4-direction silhouette');
+
+
+% smoothing and sharpening, apply this to the original image and not the
+% wavlet transformed
+
+filter = fspecial('gaussian', 8,3); 
 
 smooth = filter2(filter, gray);
 
 figure(5)
 imshow(smooth, [], "InitialMagnification", 'fit')
+title('Smoothened image');
 
 img_hp = gray - cast(smooth,"uint8");
 
-sharp = gray + img_hp * 2.;
+sharp = gray + img_hp * .5;
 
 figure(6)
 imshow(sharp, [], "InitialMagnification", 'fit')
+title('sharpened image');
 
+
+% Use the mask to determine what part should be smooth and which should be
+% sharp
 final_img = zeros(h,w);
 for r = 1:h
     for c = 1:w
@@ -109,15 +141,7 @@ end
 
 figure(7)
 imshow(final_img, [], "InitialMagnification", 'fit')
+title('Final image');
 
 
 
-%% ---------- Optional cleanup ----------
-combined_all = imopen(combined_all, strel('disk', 2));
-combined_all = imclose(combined_all, strel('disk', 3));
-combined_all = bwareafilt(combined_all, 1);
-
-figure(4); imshow(combined_all); title('Final 4-direction silhouette');
-
-%% ---------- Save result ----------
-imwrite(combined_all, 'Amadeus_4dir_silhouette.png');
